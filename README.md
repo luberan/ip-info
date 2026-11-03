@@ -152,6 +152,11 @@ billing rules; this setup does not enable them. Scorecard findings about absent
 mandatory reviews or branch protection are expected under the chosen direct-push
 workflow, not proof of an exploitable application vulnerability.
 
+Accepted Scorecard findings and their reassessment conditions are documented in
+[the security policy](.github/SECURITY.md#accepted-scorecard-recommendations).
+Closing an accepted repository recommendation is not a claim that an application
+vulnerability was fixed; all scanners remain enabled.
+
 ## API
 
 Both endpoints are same-origin, return UTF-8 JSON, and set `Cache-Control: no-store`,
