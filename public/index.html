@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="description" content="Zjistěte svou veřejnou IPv4 a IPv6 adresu, organizaci sítě, ASN a reverzní DNS. Jednoduše a bez sledování.">
+    <title>Moje IP adresa · IPv4 a IPv6</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Přejít na obsah</a>
+    <div class="site-shell" id="ip-app">
+      <header class="site-header">
+        <div class="heading-group">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M16 10v8M7 22v-4h18v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="12" y="3" width="8" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+              <rect x="3" y="22" width="8" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+              <rect x="21" y="22" width="8" height="7" rx="2" stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </div>
+          <div>
+            <p class="eyebrow">Síťová diagnostika</p>
+            <h1>Moje IP adresa</h1>
+            <p class="subtitle">Informace o vašem internetovém připojení</p>
+          </div>
+        </div>
+        <button class="button refresh-button" id="refresh-button" type="button">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Obnovit údaje
+        </button>
+      </header>
+
+      <main id="main-content">
+        <noscript>
+          <p class="notice">Pro nezávislé zjištění IPv4 a IPv6 je potřeba JavaScript. Bez něj tato stránka adresy neověří.</p>
+        </noscript>
+        <section aria-labelledby="addresses-title">
+          <div class="section-heading">
+            <h2 id="addresses-title">Veřejné IP adresy</h2>
+            <p class="refresh-status" id="refresh-status" role="status">Probíhá kontrola připojení…</p>
+          </div>
+          <div class="address-grid">
+            <article class="address-card" id="ipv4-card" aria-labelledby="ipv4-title" aria-busy="true">
+              <div class="card-heading">
+                <h3 id="ipv4-title">IPv4</h3>
+                <span class="family-badge">32 bitů</span>
+              </div>
+              <p class="ip-address is-loading" id="ipv4-address">Zjišťuji adresu…</p>
+              <div class="address-actions">
+                <p class="detection-status" id="ipv4-status" role="status" data-state="loading">Ověřuji IPv4</p>
+                <button class="button copy-address" type="button" data-copy-target="ipv4-address" data-copy-label="IPv4 adresa" aria-label="Zkopírovat IPv4 adresu" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.7"/>
+                  </svg>
+                  Kopírovat
+                </button>
+              </div>
+              <p class="detection-note" id="ipv4-note">Nezávislá kontrola přes api.ipify.org.</p>
+              <dl class="network-list">
+                <div class="detail-row">
+                  <dt>Organizace sítě</dt>
+                  <dd class="detail-value is-loading" id="ipv4-organization">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv4-organization" data-copy-label="Organizace sítě IPv4" aria-label="Zkopírovat organizaci sítě IPv4" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>ASN</dt>
+                  <dd class="detail-value technical is-loading" id="ipv4-asn">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv4-asn" data-copy-label="ASN IPv4" aria-label="Zkopírovat ASN IPv4" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Doména organizace</dt>
+                  <dd class="detail-value technical is-loading" id="ipv4-domain">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv4-domain" data-copy-label="Doména organizace IPv4" aria-label="Zkopírovat doménu organizace IPv4" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Země</dt>
+                  <dd class="detail-value is-loading" id="ipv4-country">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv4-country" data-copy-label="Země IPv4" aria-label="Zkopírovat zemi IPv4" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Reverzní DNS</dt>
+                  <dd class="detail-value technical is-loading" id="ipv4-dns">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv4-dns" data-copy-label="Reverzní DNS IPv4" aria-label="Zkopírovat reverzní DNS IPv4" hidden>⧉</button></dd>
+                </div>
+              </dl>
+              <p class="source-note" id="ipv4-source">Síťová data: IPinfo Lite · DNS: Cloudflare</p>
+            </article>
+
+            <article class="address-card ipv6-card" id="ipv6-card" aria-labelledby="ipv6-title" aria-busy="true">
+              <div class="card-heading">
+                <h3 id="ipv6-title">IPv6</h3>
+                <span class="family-badge">128 bitů</span>
+              </div>
+              <p class="ip-address is-loading" id="ipv6-address">Zjišťuji adresu…</p>
+              <div class="address-actions">
+                <p class="detection-status" id="ipv6-status" role="status" data-state="loading">Ověřuji IPv6</p>
+                <button class="button copy-address" type="button" data-copy-target="ipv6-address" data-copy-label="IPv6 adresa" aria-label="Zkopírovat IPv6 adresu" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.7"/>
+                    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.7"/>
+                  </svg>
+                  Kopírovat
+                </button>
+              </div>
+              <p class="detection-note" id="ipv6-note">Nezávislá kontrola přes api6.ipify.org.</p>
+              <dl class="network-list">
+                <div class="detail-row">
+                  <dt>Organizace sítě</dt>
+                  <dd class="detail-value is-loading" id="ipv6-organization">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv6-organization" data-copy-label="Organizace sítě IPv6" aria-label="Zkopírovat organizaci sítě IPv6" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>ASN</dt>
+                  <dd class="detail-value technical is-loading" id="ipv6-asn">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv6-asn" data-copy-label="ASN IPv6" aria-label="Zkopírovat ASN IPv6" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Doména organizace</dt>
+                  <dd class="detail-value technical is-loading" id="ipv6-domain">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv6-domain" data-copy-label="Doména organizace IPv6" aria-label="Zkopírovat doménu organizace IPv6" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Země</dt>
+                  <dd class="detail-value is-loading" id="ipv6-country">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv6-country" data-copy-label="Země IPv6" aria-label="Zkopírovat zemi IPv6" hidden>⧉</button></dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Reverzní DNS</dt>
+                  <dd class="detail-value technical is-loading" id="ipv6-dns">Načítání…</dd>
+                  <dd class="copy-cell"><button class="copy-value" type="button" data-copy-target="ipv6-dns" data-copy-label="Reverzní DNS IPv6" aria-label="Zkopírovat reverzní DNS IPv6" hidden>⧉</button></dd>
+                </div>
+              </dl>
+              <p class="source-note" id="ipv6-source">Síťová data: IPinfo Lite · DNS: Cloudflare</p>
+            </article>
+          </div>
+          <p class="section-note">IPv4 a IPv6 se ověřují zvlášť a mohou patřit různým sítím, poskytovatelům nebo VPN. Neúspěšný test sám o sobě neprokazuje, že je daný protokol vypnutý.</p>
+        </section>
+
+        <section class="connection-panel" aria-labelledby="connection-title">
+          <div class="section-heading">
+            <h2 id="connection-title">Spojení s Cloudflare</h2>
+            <span class="section-tag">Tato doména</span>
+          </div>
+          <p class="panel-intro">Údaje platí pro spojení dotazu na tuto doménu, nikoli automaticky pro obě adresy výše.</p>
+          <dl class="connection-overview">
+            <div>
+              <dt>Použitý protokol IP</dt>
+              <dd id="connection-family" class="technical is-loading">Načítání…</dd>
+            </div>
+            <div>
+              <dt>Adresa pozorovaná Cloudflare</dt>
+              <dd class="observed-address">
+                <span id="connection-ip" class="technical is-loading">Načítání…</span>
+                <button class="copy-value" type="button" data-copy-target="connection-ip" data-copy-label="Adresa pozorovaná Cloudflare" aria-label="Zkopírovat adresu pozorovanou Cloudflare" hidden>⧉</button>
+              </dd>
+            </div>
+          </dl>
+          <details class="technical-details">
+            <summary>Technické údaje připojení</summary>
+            <dl class="connection-grid">
+              <div><dt>ASN</dt><dd id="connection-asn" class="technical is-loading">Načítání…</dd></div>
+              <div><dt>Organizace sítě</dt><dd id="connection-organization" class="is-loading">Načítání…</dd></div>
+              <div><dt>Přibližná poloha</dt><dd id="connection-location" class="is-loading">Načítání…</dd></div>
+              <div><dt>Časové pásmo</dt><dd id="connection-timezone" class="technical is-loading">Načítání…</dd></div>
+              <div><dt>Datacentrum Cloudflare</dt><dd id="connection-colo" class="technical is-loading">Načítání…</dd></div>
+              <div><dt>HTTP</dt><dd id="connection-http" class="technical is-loading">Načítání…</dd></div>
+              <div><dt>TLS</dt><dd id="connection-tls" class="technical is-loading">Načítání…</dd></div>
+              <div id="connection-pseudo-row" hidden><dt>Pseudo IPv4 (není skutečná adresa)</dt><dd id="connection-pseudo" class="technical"></dd></div>
+            </dl>
+            <p class="section-note">Poloha podle IP je pouze orientační. Organizace vlastnící ASN nemusí být obchodní značkou vašeho poskytovatele internetu. PTR záznamy jsou informace z DNS, nikoli ověřený důkaz identity zařízení.</p>
+          </details>
+          <p class="source-note" id="connection-source">Zdroj: Cloudflare · /api/connection</p>
+        </section>
+
+        <p class="copy-feedback" id="copy-feedback" role="status" aria-live="polite"></p>
+        <details class="privacy-notice">
+          <summary>Soukromí a zdroje dat</summary>
+          <p>Stránka zpracovává veřejné IP adresy a dostupné technické údaje o připojení. Váš prohlížeč přímo kontaktuje <a href="https://www.ipify.org/">ipify</a> pro nezávislé zjištění IPv4 a IPv6. Cloudflare Worker posílá zjištěné adresy službě <a href="https://ipinfo.io/">IPinfo Lite</a> pro údaje o ASN, organizaci sítě a zemi. Reverzní DNS se dotazuje přes DNS over HTTPS od Cloudflare.</p>
+          <p>Aplikace nemá účty, cookies, analytické ani sledovací skripty a neukládá adresy do vlastní databáze ani aplikačních IP logů. Údaje zůstávají na stránce jen po dobu jejího otevření. Provozní poskytovatelé Cloudflare, ipify a IPinfo mohou zpracovávat technické informace o spojení podle svých zásad. Vypnuté logování a trasování Workeru neznamená, že infrastruktura žádné provozní údaje nezpracovává.</p>
+        </details>
+      </main>
+
+      <footer class="site-footer">
+        <p>Provoz na <a href="https://www.cloudflare.com/">Cloudflare</a> · Síťová data od <a href="https://ipinfo.io/">IPinfo Lite</a> · Detekce přes <a href="https://www.ipify.org/">ipify</a></p>
+        <a class="repository-link" href="https://github.com/luberan/ip-info">Zdrojový kód na GitHubu <span aria-hidden="true">↗</span></a>
+      </footer>
+    </div>
+  </body>
+</html>

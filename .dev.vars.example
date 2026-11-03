@@ -1,0 +1,3 @@
+# Copy to .dev.vars and add your IPinfo Lite token locally.
+# Leaving this empty keeps address detection and reverse DNS functional.
+IPINFO_TOKEN=""
