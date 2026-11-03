@@ -10,9 +10,9 @@ describe("bounded JSON transport", () => {
   });
 
   it("measures actual UTF-8 bytes rather than character count", async () => {
-    const exact = "ě".repeat(512);
+    const exact = "\u00e9".repeat(512);
     expect(await readTextLimited(new Response(exact).body, 1024)).toBe(exact);
-    await expect(readTextLimited(new Response(`${exact}ě`).body, 1024)).rejects.toMatchObject({
+    await expect(readTextLimited(new Response(`${exact}\u00e9`).body, 1024)).rejects.toMatchObject({
       code: "body_too_large",
     });
   });

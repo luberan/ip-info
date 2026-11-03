@@ -17,7 +17,7 @@ const endpoints: Record<AddressFamily, string> = {
   ipv4: "https://api.ipify.org?format=json",
   ipv6: "https://api6.ipify.org?format=json",
 };
-const countryNames = new Intl.DisplayNames(["cs"], { type: "region" });
+const countryNames = new Intl.DisplayNames(["en"], { type: "region" });
 
 interface CardState {
   family: AddressFamily;
@@ -49,7 +49,7 @@ let current: Run | null = null;
 
 function setValue(id: string, value: string | null, loading = false, copy = false): void {
   const target = element(id);
-  target.textContent = loading ? "Načítání…" : value ?? "Nedostupné";
+  target.textContent = loading ? "Loading…" : value ?? "Unavailable";
   target.classList.toggle("is-loading", loading);
   if (copy && value !== null && !loading) target.dataset.copyValue = value;
   else delete target.dataset.copyValue;
@@ -68,7 +68,7 @@ function countryLabel(code: string | null, name: string | null = null): string |
 
 function failureReason(error: unknown): FailureReason {
   if (error instanceof UpstreamError) return error.reason;
-  console.error("Neočekávaná chyba při načítání údajů.");
+  console.error("Unexpected error while loading data.");
   return "internal_error";
 }
 
@@ -83,24 +83,24 @@ function renderCard(run: Run, card: CardState): void {
   const loading = detecting || card.enrichmentPending;
   element(`${family}-card`).setAttribute("aria-busy", String(loading));
   setValue(`${family}-address`, card.ip ?? "—", detecting, card.ip !== null);
-  if (detecting) element(`${family}-address`).textContent = "Zjišťuji adresu…";
+  if (detecting) element(`${family}-address`).textContent = "Detecting address…";
   const status = element(`${family}-status`);
   status.dataset.state = card.detection;
   if (detecting) {
-    status.textContent = `Ověřuji ${label}`;
-    element(`${family}-note`).textContent = `Nezávislá kontrola přes ${family === "ipv4" ? "api.ipify.org" : "api6.ipify.org"}.`;
+    status.textContent = `Checking ${label}`;
+    element(`${family}-note`).textContent = `Independent check via ${family === "ipv4" ? "api.ipify.org" : "api6.ipify.org"}.`;
   } else if (card.detection === "success") {
-    status.textContent = "Ověřeno přes ipify";
-    element(`${family}-note`).textContent = `Zdroj adresy: ${family === "ipv4" ? "api.ipify.org" : "api6.ipify.org"}.`;
+    status.textContent = "Detected via ipify";
+    element(`${family}-note`).textContent = `Address source: ${family === "ipv4" ? "api.ipify.org" : "api6.ipify.org"}.`;
   } else if (card.detection === "fallback") {
-    status.textContent = "Adresa pozorovaná Cloudflare";
-    element(`${family}-note`).textContent = `${label} se nepodařilo ověřit přes ipify. Zobrazená adresa pochází přímo ze spojení s Cloudflare.`;
+    status.textContent = "Address observed by Cloudflare";
+    element(`${family}-note`).textContent = `${label} could not be verified via ipify. This address was observed directly by Cloudflare.`;
   } else {
-    status.textContent = `${label} se nepodařilo ověřit`;
+    status.textContent = `${label} could not be verified`;
     element(`${family}-note`).textContent =
       card.failure === "timeout"
-        ? `Kontrola neodpověděla do 5 sekund. To samo o sobě neprokazuje, že je ${label} vypnuté.`
-        : `Příčinou může být síťová chyba nebo blokování služby. To samo o sobě neprokazuje, že je ${label} vypnuté.`;
+        ? `The check did not respond within 5 seconds. This does not prove that ${label} is disabled.`
+        : `A network error or service blocker may have interrupted the check. This does not prove that ${label} is disabled.`;
   }
   let data = card.network?.data ?? null;
   let source = card.network?.source ?? null;
@@ -122,16 +122,16 @@ function renderCard(run: Run, card: CardState): void {
   setValue(`${family}-country`, data ? countryLabel(data.countryCode, data.country) : null, loading, true);
   const dnsValue =
     card.dns?.status === "ok" ? card.dns.names.join(", ") :
-    card.dns?.status === "none" ? "PTR záznam nenalezen" :
-    card.dns?.status === "error" ? "DNS dotaz se nezdařil" : null;
+    card.dns?.status === "none" ? "No PTR record found" :
+    card.dns?.status === "error" ? "DNS lookup failed" : null;
   setValue(`${family}-dns`, dnsValue, loading, card.dns?.status === "ok");
   element(`${family}-source`).textContent =
-    loading ? "Síťová data a DNS se načítají." :
-    card.ip === null ? "Bez zjištěné adresy nejsou síťová data ani DNS dostupné." :
-    source === "cloudflare" ? "Síťová data: Cloudflare pro tuto adresu; IPinfo nyní není dostupné. DNS: Cloudflare." :
-    card.network?.status === "ok" ? "Síťová data: IPinfo Lite · DNS: Cloudflare" :
-    card.network?.reason === "missing_token" ? "IPinfo není v této instalaci nastaveno. DNS: Cloudflare." :
-    "Síťová data nyní nejsou dostupná. DNS: Cloudflare.";
+    loading ? "Loading network data and DNS…" :
+    card.ip === null ? "Network data and DNS are unavailable without a detected address." :
+    source === "cloudflare" ? "Network data: Cloudflare for this address; IPinfo is currently unavailable. DNS: Cloudflare." :
+    card.network?.status === "ok" ? "Network data: IPinfo Lite · DNS: Cloudflare" :
+    card.network?.reason === "missing_token" ? "IPinfo is not configured for this installation. DNS: Cloudflare." :
+    "Network data is currently unavailable. DNS: Cloudflare.";
 }
 
 function renderConnection(run: Run): void {
@@ -151,11 +151,11 @@ function renderConnection(run: Run): void {
   element("connection-pseudo-row").hidden = !connection?.pseudoIpv4;
   setValue("connection-pseudo", connection?.pseudoIpv4 ?? null);
   element("connection-source").textContent =
-    loading ? "Načítám údaje přímo z Cloudflare…" :
-    !connection ? "Dotaz na Cloudflare se nezdařil. Detekce přes ipify probíhá nezávisle." :
-    connection.reason === "pseudo_ipv4_without_ipv6" ? "Cloudflare vrátilo pouze Pseudo IPv4; skutečná IPv6 adresa není dostupná." :
-    !connection.ip ? "Cloudflare v tomto prostředí neposkytlo adresu klienta. Některá metadata mohou chybět." :
-    "Zdroj: Cloudflare · /api/connection · pouze pro toto spojení";
+    loading ? "Loading connection data from Cloudflare…" :
+    !connection ? "The Cloudflare request failed. ipify detection runs independently." :
+    connection.reason === "pseudo_ipv4_without_ipv6" ? "Cloudflare returned only Pseudo IPv4; the actual IPv6 address is unavailable." :
+    !connection.ip ? "Cloudflare did not provide a client address in this environment. Some metadata may be unavailable." :
+    "Source: Cloudflare · /api/connection · this connection only";
 }
 
 async function enrich(run: Run, card: CardState): Promise<void> {
@@ -259,7 +259,7 @@ export async function refresh(): Promise<void> {
   current = run;
   root.dataset.loading = "true";
   refreshButton.setAttribute("aria-busy", "true");
-  element("refresh-status").textContent = "Probíhá kontrola připojení…";
+  element("refresh-status").textContent = "Checking your connection…";
   element("copy-feedback").textContent = "";
   renderConnection(run);
   for (const card of Object.values(run.cards)) renderCard(run, card);
@@ -272,14 +272,14 @@ export async function refresh(): Promise<void> {
   root.dataset.loading = "false";
   refreshButton.setAttribute("aria-busy", "false");
   if (results.some((result) => result.status === "rejected")) {
-    console.error("Neočekávaná chyba při kontrole připojení.");
-    element("refresh-status").textContent = "Kontrola narazila na chybu. Zkuste údaje obnovit.";
+    console.error("Unexpected error while checking the connection.");
+    element("refresh-status").textContent = "The check encountered an error. Try refreshing the data.";
   } else {
     const detected = Object.values(run.cards).filter((card) => card.ip !== null).length;
     element("refresh-status").textContent =
-      detected === 0 ? "Adresy se nepodařilo zjistit. Zkuste obnovit údaje." :
-      detected === 1 ? "Kontrola dokončena · jedna adresa je dostupná" :
-      `Aktualizováno v ${new Intl.DateTimeFormat("cs", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date())}`;
+      detected === 0 ? "Could not detect any addresses. Try refreshing the data." :
+      detected === 1 ? "Check complete · one address available" :
+      `Updated at ${new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date())}`;
   }
 }
 
@@ -292,16 +292,16 @@ for (const button of copyButtons) {
     const feedback = element("copy-feedback");
     if (!navigator.clipboard?.writeText) {
       feedback.dataset.state = "error";
-      feedback.textContent = "Kopírování není v tomto prohlížeči dostupné. Označte a zkopírujte údaj ručně.";
+      feedback.textContent = "Clipboard access is unavailable in this browser. Select and copy the value manually.";
       return;
     }
     try {
       await navigator.clipboard.writeText(value);
       feedback.dataset.state = "success";
-      feedback.textContent = `${button.dataset.copyLabel ?? "Údaj"}: zkopírováno do schránky.`;
+      feedback.textContent = `${button.dataset.copyLabel ?? "Value"}: copied to clipboard.`;
     } catch {
       feedback.dataset.state = "error";
-      feedback.textContent = "Údaj se nepodařilo zkopírovat. Zkontrolujte oprávnění schránky nebo jej zkopírujte ručně.";
+      feedback.textContent = "Could not copy the value. Check clipboard permissions or copy it manually.";
     }
   });
 }

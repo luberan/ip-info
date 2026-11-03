@@ -50,6 +50,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 beforeEach(() => {
   vi.resetModules();
   document.documentElement.innerHTML = html;
+  document.documentElement.lang = new DOMParser().parseFromString(html, "text/html").documentElement.lang;
   fetchMock.mockReset();
   fetchMock.mockImplementation(defaultFetch);
   vi.stubGlobal("fetch", fetchMock);
@@ -58,14 +59,14 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe("independent browser detection and rendering", () => {
-  it("shows both families, distinct networks, reverse DNS, and Czech country labels", async () => {
+  it("shows both families, distinct networks, reverse DNS, and English country labels", async () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     expect(text("ipv4-address")).toBe(IPV4);
     expect(text("ipv6-address")).toBe(IPV6);
     expect(text("ipv4-organization")).toBe("IPv4 network");
     expect(text("ipv6-organization")).toBe("IPv6 network");
-    expect(text("ipv4-country")).toBe("Česko (CZ)");
+    expect(text("ipv4-country")).toBe("Czechia (CZ)");
     expect(text("ipv6-dns")).toBe("resolver.example.net");
     expect(text("connection-family")).toBe("IPv4");
     expect(button("ipv4-address").disabled).toBe(false);
@@ -78,6 +79,18 @@ describe("independent browser detection and rendering", () => {
     }
   });
 
+  it("keeps country names and timestamps in English regardless of browser language", async () => {
+    vi.spyOn(navigator, "language", "get").mockReturnValue("de-DE");
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["de-DE"]);
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    expect(document.documentElement.lang).toBe("en");
+    expect(text("ipv4-country")).toBe("Czechia (CZ)");
+    expect(text("refresh-status")).toMatch(/^Updated at \d{2}:\d{2}:\d{2}$/);
+    expect(button("ipv4-address").getAttribute("aria-label")).toBe("Copy IPv4 address");
+    expect(button("ipv6-organization").getAttribute("aria-label")).toBe("Copy IPv6 network organization");
+  });
+
   it("displays and enriches IPv4 while IPv6 is still pending", async () => {
     const ipv6 = deferred<Response>();
     fetchMock.mockImplementation((input, init) =>
@@ -86,7 +99,7 @@ describe("independent browser detection and rendering", () => {
     const app = await import("../src/client/app");
     await vi.waitFor(() => expect(text("ipv4-organization")).toBe("IPv4 network"));
     expect(text("ipv4-address")).toBe(IPV4);
-    expect(text("ipv6-status")).toBe("Ověřuji IPv6");
+    expect(text("ipv6-status")).toBe("Checking IPv6");
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("api6.ipify.org"))).toBe(true);
     ipv6.resolve(Response.json({ ip: IPV6 }));
     await app.initialLoad;
@@ -102,8 +115,8 @@ describe("independent browser detection and rendering", () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     expect(text("ipv4-address")).toBe(IPV4);
-    expect(text("ipv6-status")).toBe("IPv6 se nepodařilo ověřit");
-    expect(text("ipv6-note")).toContain("neprokazuje");
+    expect(text("ipv6-status")).toBe("IPv6 could not be verified");
+    expect(text("ipv6-note")).toContain("does not prove");
     expect(button("ipv6-address").disabled).toBe(true);
   });
 
@@ -116,7 +129,7 @@ describe("independent browser detection and rendering", () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     expect(text("ipv6-address")).toBe(IPV6);
-    expect(text("ipv4-status")).toBe("IPv4 se nepodařilo ověřit");
+    expect(text("ipv4-status")).toBe("IPv4 could not be verified");
     expect(text("connection-family")).toBe("IPv6");
     expect(button("ipv6-address").disabled).toBe(false);
   });
@@ -132,8 +145,8 @@ describe("independent browser detection and rendering", () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     expect(text("ipv6-address")).toBe(IPV6);
-    expect(text("ipv6-status")).toBe("Adresa pozorovaná Cloudflare");
-    expect(text("ipv6-note")).toContain("IPv6 se nepodařilo ověřit přes ipify");
+    expect(text("ipv6-status")).toBe("Address observed by Cloudflare");
+    expect(text("ipv6-note")).toContain("IPv6 could not be verified via ipify");
     expect(text("ipv4-address")).toBe("—");
     expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/lookup")).toHaveLength(1);
   });
@@ -161,7 +174,7 @@ describe("independent browser detection and rendering", () => {
       });
       const app = await import("../src/client/app");
       await app.initialLoad;
-      expect(text("ipv4-status")).toBe("IPv4 se nepodařilo ověřit");
+      expect(text("ipv4-status")).toBe("IPv4 could not be verified");
       expect(button("ipv4-address").disabled).toBe(true);
       expect(text("ipv6-address")).toBe(IPV6);
     },
@@ -180,11 +193,11 @@ describe("independent browser detection and rendering", () => {
     const app = await import("../src/client/app");
     await vi.advanceTimersByTimeAsync(4_999);
     expect(text("ipv4-address")).toBe(IPV4);
-    expect(text("ipv6-status")).toBe("Ověřuji IPv6");
+    expect(text("ipv6-status")).toBe("Checking IPv6");
     await vi.advanceTimersByTimeAsync(1);
     await app.initialLoad;
-    expect(text("ipv6-status")).toBe("IPv6 se nepodařilo ověřit");
-    expect(text("ipv6-note")).toContain("5 sekund");
+    expect(text("ipv6-status")).toBe("IPv6 could not be verified");
+    expect(text("ipv6-note")).toContain("5 seconds");
   });
 
   it("keeps detected addresses when the first-party connection or enrichment API fails", async () => {
@@ -197,9 +210,9 @@ describe("independent browser detection and rendering", () => {
     await app.initialLoad;
     expect(text("ipv4-address")).toBe(IPV4);
     expect(text("ipv6-address")).toBe(IPV6);
-    expect(text("ipv4-organization")).toBe("Nedostupné");
-    expect(text("ipv6-dns")).toBe("DNS dotaz se nezdařil");
-    expect(text("connection-source")).toContain("nezdařil");
+    expect(text("ipv4-organization")).toBe("Unavailable");
+    expect(text("ipv6-dns")).toBe("DNS lookup failed");
+    expect(text("connection-source")).toContain("failed");
   });
 
   it("uses matching Cloudflare metadata without applying it to a different IPv6 address", async () => {
@@ -218,9 +231,9 @@ describe("independent browser detection and rendering", () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     expect(text("ipv4-organization")).toBe("Cloudflare network");
-    expect(text("ipv4-source")).toContain("Cloudflare pro tuto adresu");
-    expect(text("ipv6-organization")).toBe("Nedostupné");
-    expect(text("ipv6-source")).toContain("IPinfo není");
+    expect(text("ipv4-source")).toContain("Cloudflare for this address");
+    expect(text("ipv6-organization")).toBe("Unavailable");
+    expect(text("ipv6-source")).toContain("IPinfo is not configured");
     expect(text("ipv6-dns")).toBe("resolver.example.net");
   });
 
@@ -237,8 +250,8 @@ describe("independent browser detection and rendering", () => {
     });
     const app = await import("../src/client/app");
     await app.initialLoad;
-    expect(text("ipv4-dns")).toBe("PTR záznam nenalezen");
-    expect(text("ipv6-dns")).toBe("DNS dotaz se nezdařil");
+    expect(text("ipv4-dns")).toBe("No PTR record found");
+    expect(text("ipv6-dns")).toBe("DNS lookup failed");
     expect(button("ipv4-dns").hidden).toBe(true);
     expect(button("ipv6-dns").hidden).toBe(true);
   });
@@ -285,8 +298,8 @@ describe("independent browser detection and rendering", () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     expect(text("ipv6-address")).toBe(IPV6);
-    expect(text("ipv6-source")).toBe("Síťová data nyní nejsou dostupná. DNS: Cloudflare.");
-    expect(text("ipv6-dns")).toBe("DNS dotaz se nezdařil");
+    expect(text("ipv6-source")).toBe("Network data is currently unavailable. DNS: Cloudflare.");
+    expect(text("ipv6-dns")).toBe("DNS lookup failed");
     expect(text("ipv4-organization")).toBe("IPv4 network");
   });
 
@@ -318,7 +331,7 @@ describe("copy actions", () => {
     await app.initialLoad;
     button("ipv6-address").click();
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(IPV6));
-    expect(text("copy-feedback")).toContain("zkopírováno");
+    expect(text("copy-feedback")).toBe("IPv6 address: copied to clipboard.");
   });
 
   it("reports a clipboard permission failure without claiming success", async () => {
@@ -329,7 +342,7 @@ describe("copy actions", () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     button("ipv4-address").click();
-    await vi.waitFor(() => expect(text("copy-feedback")).toContain("nepodařilo zkopírovat"));
+    await vi.waitFor(() => expect(text("copy-feedback")).toContain("Could not copy the value"));
     expect(document.getElementById("copy-feedback")?.dataset.state).toBe("error");
   });
 
@@ -338,6 +351,6 @@ describe("copy actions", () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
     button("ipv4-address").click();
-    expect(text("copy-feedback")).toContain("není v tomto prohlížeči dostupné");
+    expect(text("copy-feedback")).toContain("Clipboard access is unavailable in this browser");
   });
 });

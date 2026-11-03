@@ -1,8 +1,12 @@
 # IP Address Information
 
-A small, open-source Czech network diagnostic tool for **https://ip.lukasberan.cz**.
+A small, open-source English-language network diagnostic tool for **https://ip.lukasberan.cz**.
 One Cloudflare Worker serves a vanilla frontend with Static Assets and a narrow
 TypeScript API. No accounts, cookies, analytics, database, or paid Cloudflare bindings.
+
+All interface text and country/time formatting use English, regardless of browser
+language. Organization and location names are displayed as supplied by the data
+providers.
 
 ## Features and architecture
 
@@ -263,7 +267,7 @@ You can then connect that existing Worker to Builds as described above.
 
 ## Privacy, security, and Free-plan limits
 
-The Czech privacy notice explains the browser's ipify requests, the Worker's
+The English privacy notice explains the browser's ipify requests, the Worker's
 IPinfo enrichment, Cloudflare DNS queries, and providers' possible processing of
 connection information. The application stores no visitor data in a database or
 persistent browser storage and does not log IP addresses. Unexpected failures
