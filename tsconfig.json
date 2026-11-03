@@ -12,8 +12,10 @@
     "verbatimModuleSyntax": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.mjs", "vitest.config.ts"],
   "exclude": ["src/client", "tests/client.test.ts"]
 }
