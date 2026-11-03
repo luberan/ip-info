@@ -7,6 +7,11 @@ import { connection, IPV4, IPV6, lookupResponse, networkData } from "./fixtures"
 
 const html = readFileSync(resolve("public", "index.html"), "utf8");
 const fetchMock = vi.fn<typeof fetch>();
+const ipifyUrls = {
+  ipv4: "https://api.ipify.org?format=json",
+  ipv6: "https://api6.ipify.org?format=json",
+};
+const ipifyRequests = new Set(Object.values(ipifyUrls));
 
 function text(id: string): string | null {
   return document.getElementById(id)?.textContent ?? null;
@@ -20,8 +25,8 @@ function button(target: string): HTMLButtonElement {
 
 function defaultFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = String(input);
-  if (url === "https://api.ipify.org?format=json") return Promise.resolve(Response.json({ ip: IPV4 }));
-  if (url === "https://api6.ipify.org?format=json") return Promise.resolve(Response.json({ ip: IPV6 }));
+  if (url === ipifyUrls.ipv4) return Promise.resolve(Response.json({ ip: IPV4 }));
+  if (url === ipifyUrls.ipv6) return Promise.resolve(Response.json({ ip: IPV6 }));
   if (url === "/api/connection") {
     return Promise.resolve(Response.json(connection(IPV4, {
       asn: 12345, asOrganization: "Cloudflare network", country: "CZ",
@@ -58,6 +63,26 @@ beforeEach(() => {
 
 afterEach(() => { vi.useRealTimers(); });
 
+describe("mock request routing", () => {
+  it.each([
+    "https://api.ipify.org.attacker.example?format=json",
+    "https://attacker.example/api.ipify.org?format=json",
+    "https://attacker.example/?target=api.ipify.org",
+    "https://api.ipify.org@attacker.example?format=json",
+    "http://api.ipify.org?format=json",
+    "https://api.ipify.org?format=text",
+    "https://api6.ipify.org.attacker.example?format=json",
+    "https://attacker.example/api6.ipify.org?format=json",
+    "https://attacker.example/?target=api6.ipify.org",
+    "https://api6.ipify.org@attacker.example?format=json",
+    "http://api6.ipify.org?format=json",
+    "https://api6.ipify.org?format=text",
+  ])("rejects an unrecognized detector URL: %s", (url) => {
+    expect(() => fetchMock(url)).toThrow("Unexpected browser request.");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
 describe("independent browser detection and rendering", () => {
   it("shows both families, distinct networks, reverse DNS, and English country labels", async () => {
     const app = await import("../src/client/app");
@@ -74,7 +99,7 @@ describe("independent browser detection and rendering", () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/lookup")).toHaveLength(2);
     for (const [input, init] of fetchMock.mock.calls) {
       expect(init?.credentials).toBe("omit");
-      if (String(input).startsWith("https://api")) expect(init?.mode).toBe("cors");
+      if (ipifyRequests.has(String(input))) expect(init?.mode).toBe("cors");
       expect(String(input)).not.toMatch(/ipinfo|dns-query/);
     }
   });
@@ -94,13 +119,13 @@ describe("independent browser detection and rendering", () => {
   it("displays and enriches IPv4 while IPv6 is still pending", async () => {
     const ipv6 = deferred<Response>();
     fetchMock.mockImplementation((input, init) =>
-      String(input).includes("api6.ipify.org") ? ipv6.promise : defaultFetch(input, init),
+      String(input) === ipifyUrls.ipv6 ? ipv6.promise : defaultFetch(input, init),
     );
     const app = await import("../src/client/app");
     await vi.waitFor(() => expect(text("ipv4-organization")).toBe("IPv4 network"));
     expect(text("ipv4-address")).toBe(IPV4);
     expect(text("ipv6-status")).toBe("Checking IPv6");
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("api6.ipify.org"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === ipifyUrls.ipv6)).toBe(true);
     ipv6.resolve(Response.json({ ip: IPV6 }));
     await app.initialLoad;
     expect(text("ipv6-address")).toBe(IPV6);
@@ -108,7 +133,7 @@ describe("independent browser detection and rendering", () => {
 
   it("keeps IPv4 usable and explains that a failed IPv6 check is inconclusive", async () => {
     fetchMock.mockImplementation((input, init) =>
-      String(input).includes("api6.ipify.org")
+      String(input) === ipifyUrls.ipv6
         ? Promise.reject(new TypeError("Blocked"))
         : defaultFetch(input, init),
     );
@@ -123,7 +148,7 @@ describe("independent browser detection and rendering", () => {
   it("supports IPv6-only connectivity when the IPv4 check fails", async () => {
     fetchMock.mockImplementation((input, init) => {
       if (String(input) === "/api/connection") return Promise.resolve(Response.json(connection(IPV6)));
-      if (String(input).includes("api.ipify.org")) return Promise.reject(new TypeError("IPv4 unavailable"));
+      if (String(input) === ipifyUrls.ipv4) return Promise.reject(new TypeError("IPv4 unavailable"));
       return defaultFetch(input, init);
     });
     const app = await import("../src/client/app");
@@ -136,7 +161,7 @@ describe("independent browser detection and rendering", () => {
 
   it("uses the observed address as an explicitly labelled fallback, only for its own family", async () => {
     fetchMock.mockImplementation((input, init) => {
-      if (String(input).includes("ipify.org")) return Promise.reject(new TypeError("ipify unavailable"));
+      if (ipifyRequests.has(String(input))) return Promise.reject(new TypeError("ipify unavailable"));
       if (String(input) === "/api/connection") {
         return Promise.resolve(Response.json(connection(IPV6, { asn: 12345, country: "CZ" })));
       }
@@ -153,7 +178,7 @@ describe("independent browser detection and rendering", () => {
 
   it("does not use a local or private observed address as a public fallback", async () => {
     fetchMock.mockImplementation((input, init) => {
-      if (String(input).includes("ipify.org")) return Promise.reject(new TypeError("Unavailable"));
+      if (ipifyRequests.has(String(input))) return Promise.reject(new TypeError("Unavailable"));
       if (String(input) === "/api/connection") return Promise.resolve(Response.json(connection("127.0.0.1")));
       return defaultFetch(input, init);
     });
@@ -168,7 +193,7 @@ describe("independent browser detection and rendering", () => {
     "rejects invalid IPv4 detector data %j",
     async (invalid) => {
       fetchMock.mockImplementation((input, init) => {
-        if (String(input).includes("api.ipify.org")) return Promise.resolve(Response.json(invalid));
+        if (String(input) === ipifyUrls.ipv4) return Promise.resolve(Response.json(invalid));
         if (String(input) === "/api/connection") return Promise.resolve(Response.json(connection(null)));
         return defaultFetch(input, init);
       });
@@ -183,7 +208,7 @@ describe("independent browser detection and rendering", () => {
   it("times out a stalled detector after exactly five seconds without blocking IPv4", async () => {
     vi.useFakeTimers();
     fetchMock.mockImplementation((input, init) => {
-      if (String(input).includes("api6.ipify.org")) {
+      if (String(input) === ipifyUrls.ipv6) {
         return new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
         });
@@ -202,7 +227,7 @@ describe("independent browser detection and rendering", () => {
 
   it("keeps detected addresses when the first-party connection or enrichment API fails", async () => {
     fetchMock.mockImplementation((input, init) =>
-      String(input).startsWith("/api/")
+      (String(input) === "/api/connection" || String(input) === "/api/lookup")
         ? Promise.reject(new TypeError("Worker unavailable"))
         : defaultFetch(input, init),
     );
@@ -306,11 +331,11 @@ describe("independent browser detection and rendering", () => {
   it("prevents stale results from overwriting a newer refresh", async () => {
     const oldIpv4 = deferred<Response>();
     fetchMock.mockImplementation((input, init) =>
-      String(input).includes("api.ipify.org") ? oldIpv4.promise : defaultFetch(input, init),
+      String(input) === ipifyUrls.ipv4 ? oldIpv4.promise : defaultFetch(input, init),
     );
     const app = await import("../src/client/app");
     fetchMock.mockImplementation((input, init) =>
-      String(input).includes("api.ipify.org")
+      String(input) === ipifyUrls.ipv4
         ? Promise.resolve(Response.json({ ip: "9.9.9.9" }))
         : defaultFetch(input, init),
     );
