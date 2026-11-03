@@ -1,5 +1,8 @@
 # IP Address Information
 
+[![CI](https://github.com/luberan/ip-info/actions/workflows/ci.yml/badge.svg)](https://github.com/luberan/ip-info/actions/workflows/ci.yml)
+[![Scorecard](https://github.com/luberan/ip-info/actions/workflows/scorecard.yml/badge.svg)](https://github.com/luberan/ip-info/actions/workflows/scorecard.yml)
+
 A small, open-source English-language network diagnostic tool for **https://ip.lukasberan.cz**.
 One Cloudflare Worker serves a vanilla frontend with Static Assets and a narrow
 TypeScript API. No accounts, cookies, analytics, database, or paid Cloudflare bindings.
@@ -86,6 +89,7 @@ Cloudflare headers as authenticated metadata outside Cloudflare's edge.
 npm test
 npm run typecheck
 npm run build
+npm run test:smoke
 ```
 
 Vitest uses mocked HTTP responses, never live ipify, IPinfo, or DNS dependencies.
@@ -98,6 +102,55 @@ and clipboard errors. Browser tests use jsdom; production has no jsdom dependenc
 `npm run build` type-checks both Worker and browser contexts, bundles the browser,
 and validates Wrangler with `wrangler deploy --dry-run`. Its output is local to
 `.wrangler/build`; **this is not a production deployment or an edge CPU benchmark**.
+
+`npm run test:smoke` starts the real local Workers runtime through Wrangler's test
+harness and always shuts it down afterwards. It checks asset and 404 routing, the
+connection endpoint, API validation/methods, security headers, and no-store
+responses. It overrides the IPinfo token with an empty test secret and makes no
+ipify, IPinfo, or DNS requests. No Cloudflare account credentials are needed.
+
+## GitHub automation
+
+GitHub Actions runs **tests, type checks, build validation, and runtime smoke
+checks** on pull requests, pushes to `main`, weekly, and on manual request.
+The main job uses the production Node version from `.node-version`; compatibility
+jobs also test the supported Node 22 minimum and current Node 26 releases.
+
+- **CodeQL:** GitHub-managed default setup with extended security queries for
+  JavaScript/TypeScript. Manage it under **Settings → Advanced Security → Code
+  scanning**; do not add a second CodeQL analysis workflow alongside default setup.
+- **Dependabot:** weekly npm and GitHub Actions update PRs. Patch/minor updates
+  are grouped; major upgrades remain separate. Security update PRs have their own
+  group. Updates are never automatically merged.
+- **Dependency review:** pull requests introducing known high/critical
+  vulnerabilities receive a failed check, including development dependencies.
+- **OpenSSF Scorecard:** trusted-branch and weekly supply-chain posture checks,
+  uploaded to GitHub's code-scanning dashboard. Results are not published to a
+  separate external Scorecard service and need no extra token.
+- **Secret protection:** keep secret scanning and push protection enabled.
+  Supported-pattern scanning is not a guarantee that every IPinfo or other token
+  format will be recognized. Never rely on it instead of keeping secrets out of Git.
+  Optional generic-pattern scanning and partner-token validity checks require an
+  eligible organization/Secret Protection plan and are not enabled by this setup.
+- **Private vulnerability reports:** use the process in
+  [the security policy](.github/SECURITY.md).
+
+Workflows use standard GitHub-hosted Ubuntu runners, immutable action commit
+pins, read-only checkout credentials, and no production secrets. Only the trusted
+Scorecard job can upload security events; untrusted PR code never uses
+`pull_request_target` or a privileged workflow-run handoff. npm caching avoids
+repeated downloads without retaining test-report artifacts.
+
+**Direct pushes to `main` remain allowed.** Checks are informative, not mandatory
+merge gates. A failed GitHub check does not stop Cloudflare Workers Builds;
+Cloudflare independently runs its configured build command. GitHub Actions does
+not deploy the Worker or receive Cloudflare/IPinfo credentials.
+
+Standard GitHub-hosted runner compute is free for public repositories. Larger
+runners, storage overages, and optional paid security features have separate
+billing rules; this setup does not enable them. Scorecard findings about absent
+mandatory reviews or branch protection are expected under the chosen direct-push
+workflow, not proof of an exploitable application vulnerability.
 
 ## API
 
@@ -316,6 +369,11 @@ src/
     http.ts, response.ts      Deadlines, bounded JSON, secure API responses
     types.ts, validation.ts   Response contracts and validation helpers
 tests/                       Mocked Worker, IP, DNS, HTTP, browser, config tests
+scripts/smoke.mjs             Real Workers runtime smoke checks
+.github/
+  workflows/                 CI, dependency review, and Scorecard (no deployment)
+  dependabot.yml             npm and action update PRs
+  SECURITY.md                Private vulnerability reporting policy
 wrangler.jsonc               Static Assets, Custom Domain, disabled observability
 tsconfig*.json               Separate Worker and browser type environments
 vitest.config.ts             Automated test configuration
