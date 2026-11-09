@@ -11,6 +11,9 @@ describe("deployment and static security contracts", () => {
   ])("serves English metadata and copy in %s", (file, title) => {
     const html = readFileSync(new URL(`../public/${file}`, import.meta.url), "utf8");
     expect(html).toContain('<html lang="en">');
+    expect(html).toContain('<meta name="color-scheme" content="dark">');
+    expect(html).toContain('<meta name="theme-color" content="#0b1020">');
+    expect(html).toContain('<link rel="stylesheet" href="/styles.css">');
     expect(html).toContain(`<title>${title}</title>`);
     expect(html).not.toMatch(untranslatedDiacritics);
   });

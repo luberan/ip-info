@@ -22,7 +22,8 @@ providers.
 - Directly observed Cloudflare connection address and available ASN, location,
   timezone, colo, HTTP, and TLS metadata.
 - Explicitly labelled Cloudflare fallbacks, copy buttons, refresh without page
-  navigation, responsive layout, accessible controls, and OS light/dark themes.
+  navigation, responsive layout, accessible controls, and a dark-blue visual theme
+  consistent with the [DNS lookup tool](https://github.com/luberan/nslookup).
 - Strict public-IP validation, bounded bodies, fixed upstream URLs, restrictive
   security headers, and `no-store` on every API response.
 
