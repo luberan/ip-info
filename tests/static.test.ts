@@ -15,7 +15,16 @@ describe("deployment and static security contracts", () => {
     expect(html).toContain('<meta name="theme-color" content="#0b1020">');
     expect(html).toContain('<link rel="stylesheet" href="/styles.css">');
     expect(html).toContain(`<title>${title}</title>`);
-    expect(html).not.toMatch(untranslatedDiacritics);
+    expect(html.replace("Luk\u00e1\u0161 Beran", "")).not.toMatch(untranslatedDiacritics);
+  });
+
+  it("uses pipe-separated platform, provider, and creator credits in the footer", () => {
+    const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+    const footer = html.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/u)?.[1];
+    expect(footer).toContain('Powered by <a href="https://www.cloudflare.com/">Cloudflare Workers</a> | Network data by ');
+    expect(footer).toContain('IPinfo Lite</a> | Detection by ');
+    expect(footer).toContain('ipify</a> | Created by <a href="https://www.lukasberan.cz/"><strong>Luk\u00e1\u0161 Beran</strong></a>');
+    expect(footer).not.toContain("\u00b7");
   });
 
   it("configures the requested Worker, Custom Domain, asset routing, and disabled observability", () => {
