@@ -21,7 +21,7 @@ describe("deployment and static security contracts", () => {
   it("uses pipe-separated platform, provider, and creator credits in the footer", () => {
     const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
     const footer = html.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/u)?.[1];
-    expect(footer).toContain('Powered by <a href="https://www.cloudflare.com/">Cloudflare Workers</a> | Network data by ');
+    expect(footer).toContain('<p>Powered by Cloudflare Workers | Network data by ');
     expect(footer).toContain('IPinfo Lite</a> | Detection by ');
     expect(footer).toContain('ipify</a> | Created by <a href="https://www.lukasberan.cz/"><strong>Luk\u00e1\u0161 Beran</strong></a>');
     expect(footer).not.toContain("\u00b7");
