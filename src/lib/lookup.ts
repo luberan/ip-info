@@ -12,10 +12,10 @@ import type {
 } from "./types";
 import { isAsn, isCountryCode, isDnsName, isRecord, isText } from "./validation";
 
-function optionalText(data: Record<string, unknown>, key: string): string | null {
+function optionalText(data: Record<string, unknown>, key: string, maxLength?: number): string | null {
   const value = data[key];
   if (value === undefined || value === null) return null;
-  if (!isText(value)) throw new UpstreamError("invalid_response");
+  if (!isText(value, maxLength)) throw new UpstreamError("invalid_response");
   return value;
 }
 
@@ -26,7 +26,7 @@ function parseNetwork(value: unknown, ip: ParsedIp): NetworkData {
   const data: NetworkData = {
     asn: optionalText(value, "asn"),
     organization: optionalText(value, "as_name"),
-    domain: optionalText(value, "as_domain"),
+    domain: optionalText(value, "as_domain", 254),
     countryCode: optionalText(value, "country_code"),
     country: optionalText(value, "country"),
     continentCode: optionalText(value, "continent_code"),
@@ -44,13 +44,14 @@ function parseNetwork(value: unknown, ip: ParsedIp): NetworkData {
   return data;
 }
 
-export async function lookupNetwork(ip: ParsedIp, env: Env): Promise<NetworkResult> {
+export async function lookupNetwork(ip: ParsedIp, env: Env, signal?: AbortSignal): Promise<NetworkResult> {
   if (!ip.isPublic) throw new TypeError("Network lookup requires a public IP address.");
   const token = env.IPINFO_TOKEN?.trim();
   if (!token) return { status: "unavailable", source: "ipinfo", data: null, reason: "missing_token" };
   try {
     const data = await fetchJson(`https://api.ipinfo.io/lite/${encodeURIComponent(ip.value)}`, {
       headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+      signal,
     });
     return { status: "ok", source: "ipinfo", data: parseNetwork(data, ip), reason: null };
   } catch (error) {
@@ -65,12 +66,13 @@ export async function lookupAddress(
   value: string,
   env: Env,
   connection: ConnectionResponse,
+  signal?: AbortSignal,
 ): Promise<AddressLookup> {
   const ip = parsePublicIp(value);
   if (!ip) throw new TypeError("Address lookup requires a public IP address.");
   const [networkResult, dnsResult] = await Promise.allSettled([
-    lookupNetwork(ip, env),
-    reverseDns(ip.value),
+    lookupNetwork(ip, env, signal),
+    reverseDns(ip.value, signal),
   ]);
   let network: NetworkResult;
   if (networkResult.status === "fulfilled") {

@@ -84,6 +84,22 @@ describe("mock request routing", () => {
 });
 
 describe("independent browser detection and rendering", () => {
+  it("offers the first-party connection link until the interactive checks start", async () => {
+    const style = document.createElement("style");
+    style.textContent = readFileSync(resolve("public", "styles.css"), "utf8");
+    document.head.append(style);
+    const notice = document.querySelector<HTMLElement>("#startup-notice")!;
+    const controls = [...document.querySelectorAll<HTMLElement>("[data-requires-js]")];
+    expect(getComputedStyle(notice).display).not.toBe("none");
+    expect(notice.querySelector("a")?.getAttribute("href")).toBe("/api/connection");
+    expect(controls).toHaveLength(3);
+    for (const control of controls) expect(getComputedStyle(control).display).toBe("none");
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    expect(getComputedStyle(notice).display).toBe("none");
+    for (const control of controls) expect(getComputedStyle(control).display).not.toBe("none");
+  });
+
   it("shows both families, distinct networks, reverse DNS, and English country labels", async () => {
     const app = await import("../src/client/app");
     await app.initialLoad;
@@ -174,6 +190,23 @@ describe("independent browser detection and rendering", () => {
     expect(text("ipv6-note")).toContain("IPv6 could not be verified via ipify");
     expect(text("ipv4-address")).toBe("—");
     expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/lookup")).toHaveLength(1);
+  });
+
+  it("displays an added Pseudo IPv4 only in technical details", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      if (String(input) === "/api/connection") {
+        return Promise.resolve(Response.json({ ...connection(IPV6), pseudoIpv4: "240.1.2.3" }));
+      }
+      if (ipifyRequests.has(String(input))) return Promise.reject(new TypeError("Unavailable"));
+      return defaultFetch(input, init);
+    });
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    expect(text("connection-ip")).toBe(IPV6);
+    expect(text("connection-pseudo")).toBe("240.1.2.3");
+    expect(document.getElementById("connection-pseudo-row")?.hidden).toBe(false);
+    expect(text("ipv4-address")).toBe("—");
+    expect(text("ipv6-address")).toBe(IPV6);
   });
 
   it("does not use a local or private observed address as a public fallback", async () => {
@@ -281,6 +314,27 @@ describe("independent browser detection and rendering", () => {
     expect(button("ipv6-dns").hidden).toBe(true);
   });
 
+  it("preserves the fallback supplied by the lookup when the connection request has fewer fields", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      if (String(input) === "/api/connection") return Promise.resolve(Response.json(connection(IPV4, { country: "CZ" })));
+      if (String(input) === "/api/lookup" && JSON.parse(String(init?.body)).ipv4) {
+        return Promise.resolve(Response.json(lookupResponse(IPV4, {
+          status: "fallback", source: "cloudflare", reason: "missing_token",
+          data: {
+            asn: "AS15169", organization: "Observed during lookup", domain: null,
+            country: null, countryCode: null, continent: null, continentCode: null,
+          },
+        })));
+      }
+      return defaultFetch(input, init);
+    });
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    expect(text("ipv4-organization")).toBe("Observed during lookup");
+    expect(text("ipv4-asn")).toBe("AS15169");
+    expect(text("ipv4-country")).toBe("Czechia (CZ)");
+  });
+
   it("renders external organization text literally rather than injecting HTML", async () => {
     const organization = '<img src=x onerror="globalThis.pwned=true">';
     fetchMock.mockImplementation((input, init) => {
@@ -324,8 +378,24 @@ describe("independent browser detection and rendering", () => {
     await app.initialLoad;
     expect(text("ipv6-address")).toBe(IPV6);
     expect(text("ipv6-source")).toBe("Network data is currently unavailable. DNS: Cloudflare.");
-    expect(text("ipv6-dns")).toBe("DNS lookup failed");
+    expect(text("ipv6-dns")).toBe("No PTR record found");
     expect(text("ipv4-organization")).toBe("IPv4 network");
+  });
+
+  it("keeps valid network data when the DNS part of the same lookup is malformed", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      if (String(input) === "/api/lookup" && JSON.parse(String(init?.body)).ipv6) {
+        const response = lookupResponse(IPV6);
+        return Promise.resolve(Response.json({
+          ...response, ipv6: { ...response.ipv6, reverseDns: { status: "ok", names: [] } },
+        }));
+      }
+      return defaultFetch(input, init);
+    });
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    expect(text("ipv6-organization")).toBe("Test network");
+    expect(text("ipv6-dns")).toBe("DNS lookup failed");
   });
 
   it("prevents stale results from overwriting a newer refresh", async () => {
@@ -349,6 +419,19 @@ describe("independent browser detection and rendering", () => {
 });
 
 describe("copy actions", () => {
+  it("keeps an old clipboard operation from announcing success after a refresh", async () => {
+    const pending = deferred<void>();
+    const writeText = vi.fn(() => pending.promise);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    button("ipv4-address").click();
+    expect(writeText).toHaveBeenCalledOnce();
+    await app.refresh();
+    pending.resolve();
+    await pending.promise;
+    expect(text("copy-feedback")).toBe("");
+  });
   it("copies the displayed address and announces success", async () => {
     const writeText = vi.fn<(value: string) => Promise<void>>().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });

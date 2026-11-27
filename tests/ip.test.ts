@@ -19,6 +19,13 @@ describe("strict IP parsing", () => {
     expect(parseIp("2001:4860::8.8.8.8")?.value).toBe("2001:4860::808:808");
   });
 
+  it("preserves the bits of compatible and mapped IPv6 literals with a dotted tail", () => {
+    expect(parseIp("::192.0.2.128")?.value).toBe("::c000:280");
+    expect(parseIp("::ffff:192.0.2.128")?.value).toBe("::ffff:c000:280");
+    expect(ptrName("::192.0.2.128")).toBe(ptrName("::c000:280"));
+    expect(parsePublicIp("::192.0.2.128")).toBeNull();
+  });
+
   it.each([
     "", "1", "1.2.3", "127.1", "256.1.1.1", "1.2.3.4.5", "01.2.3.4",
     "0177.0.0.1", "0x7f.0.0.1", "0x08080808", " 8.8.8.8", "8.8.8.8 ",

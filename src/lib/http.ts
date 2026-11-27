@@ -1,6 +1,7 @@
 import type { FailureReason } from "./types";
 
 export const UPSTREAM_TIMEOUT_MS = 3_500;
+export const REQUEST_BODY_TIMEOUT_MS = 5_000;
 export const MAX_REQUEST_BYTES = 1_024;
 export const MAX_UPSTREAM_BYTES = 32_768;
 
@@ -27,34 +28,29 @@ export async function readTextLimited(
   maxBytes: number,
   signal?: AbortSignal,
 ): Promise<string> {
-  if (!body) return "";
   signal?.throwIfAborted();
+  if (!body) return "";
   const reader = body.getReader();
-  let onAbort: (() => void) | undefined;
-  const aborted = signal
-    ? new Promise<never>((_, reject) => {
-        onAbort = () => reject(signal.reason);
-        signal.addEventListener("abort", onAbort, { once: true });
-      })
-    : null;
+  // Canceling settles pending reads immediately. The source's cleanup can take longer.
+  const cancel = () => { void reader.cancel().catch(() => {}); };
+  signal?.addEventListener("abort", cancel, { once: true });
   const chunks: Uint8Array[] = [];
   let total = 0;
-  let finished = false;
   try {
     for (;;) {
+      const chunk = await reader.read();
       signal?.throwIfAborted();
-      const chunk = await (aborted ? Promise.race([reader.read(), aborted]) : reader.read());
-      if (chunk.done) {
-        finished = true;
-        break;
-      }
+      if (chunk.done) break;
+      if (chunk.value.byteLength === 0) continue;
       total += chunk.value.byteLength;
       if (total > maxBytes) throw new BodyError("body_too_large");
       chunks.push(chunk.value);
     }
+  } catch (error) {
+    cancel();
+    throw error;
   } finally {
-    if (onAbort) signal?.removeEventListener("abort", onAbort);
-    if (!finished) await reader.cancel();
+    signal?.removeEventListener("abort", cancel);
     reader.releaseLock();
   }
   const bytes = new Uint8Array(total);
@@ -89,18 +85,13 @@ export async function fetchJson(
   try {
     // Workers reject redirect: "error"; manual 3xx responses are rejected below.
     const response = await fetch(url, { ...init, signal: controller.signal, redirect: "manual" });
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new UpstreamError("http_error");
-    }
-    if (!["application/json", "application/dns-json"].includes(mediaType(response.headers.get("Content-Type")))) {
-      await response.body?.cancel();
-      throw new UpstreamError("invalid_response");
-    }
     const length = response.headers.get("Content-Length");
-    if (length && /^\d+$/.test(length) && Number(length) > MAX_UPSTREAM_BYTES) {
-      await response.body?.cancel();
-      throw new UpstreamError("invalid_response");
+    const type = mediaType(response.headers.get("Content-Type"));
+    const isJson = type === "application/json" || type === "application/dns-json";
+    const oversized = length !== null && /^\d+$/.test(length) && Number(length) > MAX_UPSTREAM_BYTES;
+    if (!response.ok || !isJson || oversized) {
+      void response.body?.cancel().catch(() => {});
+      throw new UpstreamError(response.ok ? "invalid_response" : "http_error");
     }
     const text = await readTextLimited(response.body, MAX_UPSTREAM_BYTES, controller.signal);
     try {

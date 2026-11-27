@@ -77,23 +77,28 @@ export function parseConnectionResponse(value: unknown): ConnectionResponse {
     nullableText(cf.colo) && nullableText(cf.httpProtocol) && nullableText(cf.tlsVersion);
   const ip = parseIp(value.ip);
   const pseudo = parseIp(value.pseudoIpv4, "ipv4");
+  const { ipSource } = value;
+  if (ipSource !== null && ipSource !== "cf-connecting-ip" && ipSource !== "cf-connecting-ipv6") {
+    throw new UpstreamError("invalid_response");
+  }
   const validPseudo = value.pseudoIpv4 === null || (pseudo !== null && isPseudoIpv4(pseudo));
   const validAddress = ip
     ? ip.value === value.ip &&
       ip.family === value.family &&
       value.reason === null &&
-      ((value.ipSource === "cf-connecting-ip" && value.pseudoIpv4 === null) ||
-        (value.ipSource === "cf-connecting-ipv6" && ip.family === "ipv6" && pseudo !== null))
+      !isPseudoIpv4(ip) &&
+      ((ipSource === "cf-connecting-ip" && (pseudo === null || ip.family === "ipv6")) ||
+        (ipSource === "cf-connecting-ipv6" && ip.family === "ipv6" && pseudo !== null))
     : value.ip === null &&
       value.family === null &&
-      value.ipSource === null &&
+      ipSource === null &&
       ((value.reason === "client_ip_unavailable" && value.pseudoIpv4 === null) ||
         (value.reason === "pseudo_ipv4_without_ipv6" && pseudo !== null));
   if (!validMetadata || !validPseudo || !validAddress) throw new UpstreamError("invalid_response");
   return {
     ip: ip?.value ?? null,
     family: ip?.family ?? null,
-    ipSource: ip ? (pseudo ? "cf-connecting-ipv6" : "cf-connecting-ip") : null,
+    ipSource,
     pseudoIpv4: pseudo?.value ?? null,
     reason: ip ? null : pseudo ? "pseudo_ipv4_without_ipv6" : "client_ip_unavailable",
     metadata: {
@@ -118,11 +123,17 @@ export function parseLookupResponse(value: unknown, family: AddressFamily, ip: s
   if (
     !isRecord(result) ||
     result.family !== family ||
-    parsePublicIp(result.ip, family)?.value !== ip ||
-    !isNetworkResult(result.network) ||
-    !isDnsResult(result.reverseDns)
+    parsePublicIp(result.ip, family)?.value !== ip
   ) {
     throw new UpstreamError("invalid_response");
   }
-  return { ip, family, network: result.network, reverseDns: result.reverseDns };
+  return {
+    ip, family,
+    network: isNetworkResult(result.network)
+      ? result.network
+      : { status: "error", source: "ipinfo", data: null, reason: "invalid_response" },
+    reverseDns: isDnsResult(result.reverseDns)
+      ? result.reverseDns
+      : { status: "error", names: [], reason: "invalid_response" },
+  };
 }

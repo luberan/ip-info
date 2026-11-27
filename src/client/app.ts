@@ -46,6 +46,7 @@ const root = element("ip-app");
 const refreshButton = element("refresh-button");
 const copyButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-copy-target]")];
 let current: Run | null = null;
+let copyAttempt = 0;
 
 function setValue(id: string, value: string | null, loading = false, copy = false): void {
   const target = element(id);
@@ -63,7 +64,8 @@ function setValue(id: string, value: string | null, loading = false, copy = fals
 function countryLabel(code: string | null, name: string | null = null): string | null {
   if (!code) return name;
   const translated = countryNames.of(code);
-  return `${translated === code ? name ?? code : translated ?? code} (${code})`;
+  const label = translated === code ? name : translated ?? name;
+  return label && label !== code ? `${label} (${code})` : code;
 }
 
 function failureReason(error: unknown): FailureReason {
@@ -110,7 +112,7 @@ function renderCard(run: Run, card: CardState): void {
     card.network?.status !== "ok" &&
     run.connection?.ip === card.ip
   ) {
-    const fallback = connectionNetwork(run.connection);
+    const fallback = connectionNetwork(run.connection, data);
     if (fallback) {
       data = fallback;
       source = "cloudflare";
@@ -257,6 +259,7 @@ export async function refresh(): Promise<void> {
     cards: { ipv4: newCard("ipv4"), ipv6: newCard("ipv6") },
   };
   current = run;
+  copyAttempt++;
   root.dataset.loading = "true";
   refreshButton.setAttribute("aria-busy", "true");
   element("refresh-status").textContent = "Checking your connection…";
@@ -289,6 +292,7 @@ for (const button of copyButtons) {
     const target = button.dataset.copyTarget;
     const value = target ? element(target).dataset.copyValue : undefined;
     if (!value) return;
+    const attempt = ++copyAttempt;
     const feedback = element("copy-feedback");
     if (!navigator.clipboard?.writeText) {
       feedback.dataset.state = "error";
@@ -297,9 +301,11 @@ for (const button of copyButtons) {
     }
     try {
       await navigator.clipboard.writeText(value);
+      if (attempt !== copyAttempt) return;
       feedback.dataset.state = "success";
       feedback.textContent = `${button.dataset.copyLabel ?? "Value"}: copied to clipboard.`;
     } catch {
+      if (attempt !== copyAttempt) return;
       feedback.dataset.state = "error";
       feedback.textContent = "Could not copy the value. Check clipboard permissions or copy it manually.";
     }

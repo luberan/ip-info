@@ -30,7 +30,7 @@
             <p class="subtitle">Information about your internet connection</p>
           </div>
         </div>
-        <button class="button refresh-button" id="refresh-button" type="button">
+        <button class="button refresh-button" id="refresh-button" type="button" data-requires-js>
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
@@ -39,10 +39,8 @@
       </header>
 
       <main id="main-content">
-        <noscript>
-          <p class="notice">JavaScript is required to detect IPv4 and IPv6 independently. This page cannot verify addresses without it.</p>
-        </noscript>
-        <section aria-labelledby="addresses-title">
+        <p class="notice" id="startup-notice"><a href="/api/connection">View your Cloudflare connection as JSON</a>. Independent IPv4 and IPv6 checks require JavaScript.</p>
+        <section aria-labelledby="addresses-title" data-requires-js>
           <div class="section-heading">
             <h2 id="addresses-title">Public IP addresses</h2>
             <p class="refresh-status" id="refresh-status" role="status">Checking your connection…</p>
@@ -145,7 +143,7 @@
           <p class="section-note">IPv4 and IPv6 are checked independently and may use different networks, providers, or VPNs. A failed check alone does not prove that the protocol is disabled.</p>
         </section>
 
-        <section class="connection-panel" aria-labelledby="connection-title">
+        <section class="connection-panel" aria-labelledby="connection-title" data-requires-js>
           <div class="section-heading">
             <h2 id="connection-title">Connection to Cloudflare</h2>
             <span class="section-tag">This domain</span>

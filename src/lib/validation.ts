@@ -5,8 +5,8 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function isText(value: unknown, maxLength = 200): value is string {
   return (
     typeof value === "string" &&
-    value.length > 0 &&
     value.length <= maxLength &&
+    value.trim().length > 0 &&
     !/[\u0000-\u001f\u007f]/.test(value)
   );
 }

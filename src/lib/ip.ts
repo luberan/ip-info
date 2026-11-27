@@ -42,19 +42,22 @@ const pseudoIpv4 = ipaddr.IPv4.parseCIDR("240.0.0.0/4");
 
 export function parseIp(value: unknown, expectedFamily?: AddressFamily): ParsedIp | null {
   if (typeof value !== "string" || value.length > 45 || value.length === 0) return null;
-  const isV6 = value.includes(":");
-  if (isV6) {
-    if (!/^[a-f0-9:.]+$/i.test(value)) return null;
-    if (value.includes(".") && !strictIpv4.test(value.slice(value.lastIndexOf(":") + 1))) {
-      return null;
+  const family = value.includes(":") ? "ipv6" : "ipv4";
+  if (expectedFamily && family !== expectedFamily) return null;
+  let address: ParsedIp["address"];
+  try {
+    if (family === "ipv4") {
+      if (!strictIpv4.test(value)) return null;
+      address = ipaddr.IPv4.parse(value);
+    } else {
+      if (!/^[a-f0-9:.]+$/i.test(value)) return null;
+      // The URL IPv6 parser preserves the difference between ::a.b.c.d and ::ffff:a.b.c.d.
+      const literal = value.includes(".") ? new URL(`http://[${value}]/`).hostname.slice(1, -1) : value;
+      address = ipaddr.IPv6.parse(literal);
     }
-  } else if (!strictIpv4.test(value)) {
+  } catch {
     return null;
   }
-  if (!ipaddr.isValid(value)) return null;
-  const address = ipaddr.parse(value);
-  const family: AddressFamily = address.kind() === "ipv4" ? "ipv4" : "ipv6";
-  if (expectedFamily && family !== expectedFamily) return null;
   if (address instanceof ipaddr.IPv4) {
     return {
       value: address.toString(),

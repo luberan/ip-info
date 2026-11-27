@@ -3,6 +3,11 @@
   "name": "ip-lukasberan",
   "main": "./src/index.ts",
   "compatibility_date": "2026-11-03",
+  "compatibility_flags": ["enable_request_signal"],
+  "build": {
+    "command": "npm run build:assets",
+    "watch_dir": "./src"
+  },
   "workers_dev": false,
   "preview_urls": false,
   "send_metrics": false,
@@ -15,7 +20,7 @@
   ],
   "assets": {
     "directory": "./public",
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": ["/api", "/api/*"],
     "not_found_handling": "404-page"
   },
   "observability": {

@@ -18,7 +18,8 @@ providers.
 - Five-second detection deadlines and independent loading/error states.
 - Server-side IPinfo Lite ASN, AS organization/domain, country, and continent data.
 - IPv4/IPv6 PTR resolution through Cloudflare DNS over HTTPS, including multiple
-  answers and a distinction between missing records and failed queries.
+  answers and classless reverse zones. Only PTR records belonging to the queried
+  name or its CNAME chain are returned.
 - Directly observed Cloudflare connection address and available ASN, location,
   timezone, colo, HTTP, and TLS metadata.
 - Explicitly labelled Cloudflare fallbacks, copy buttons, refresh without page
@@ -34,14 +35,15 @@ connectivity, DNS, a content blocker, or ipify itself may be responsible. IPv4 a
 IPv6 may use different networks or VPN exits.
 
 Cloudflare metadata is attached only to the address observed on that particular
-API request. A Pseudo IPv4 overwrite is recognized using the Class E primary
-header and the preserved `CF-Connecting-IPv6`; a synthetic address is never shown
-as a real public IPv4 fallback.
+API request. In Pseudo IPv4 Overwrite Headers mode the Worker recovers the IPv6
+address from `CF-Connecting-IPv6`. In Add Header mode it keeps the native IPv6
+address and shows a valid `CF-Pseudo-IPv4` in the technical details. If the page
+script is unavailable, a link opens the connection API directly.
 
 The shared `ipaddr.js` parser is bundled into the browser JavaScript using esbuild.
 The frontend uses no framework, CDN scripts, external fonts, or runtime build
-service. `public/app.js` is generated from readable TypeScript sources and ignored
-by Git; every development, build, and deployment command generates it.
+service. Wrangler builds `public/app.js` from the TypeScript sources before
+development and deployment. The generated file is ignored by Git.
 
 ## Requirements
 
@@ -75,9 +77,8 @@ npm run dev
 ```
 
 Open the localhost URL printed by Wrangler (normally http://localhost:8787).
-Wrangler watches the Worker and static assets. After changing `src/client`,
-run `npm run build:assets` in another terminal to regenerate the browser bundle.
-Changes to HTML/CSS do not need bundling.
+Wrangler watches the static assets and rebuilds the Worker and browser bundle
+when files under `src` change.
 
 `request.cf` and trusted visitor headers may be absent or incomplete locally.
 Unavailable values are intentional; local loopback addresses are never enriched
@@ -105,9 +106,9 @@ and validates Wrangler with `wrangler deploy --dry-run`. Its output is local to
 `.wrangler/build`; **this is not a production deployment or an edge CPU benchmark**.
 
 `npm run test:smoke` starts the real local Workers runtime through Wrangler's test
-harness and always shuts it down afterwards. It checks asset and 404 routing, the
-connection endpoint, API validation/methods, security headers, and no-store
-responses. It overrides the IPinfo token with an empty test secret and makes no
+harness and always shuts it down afterwards. It checks browser navigation and
+fetch routing for assets, 404 pages and the API. It also checks UTF-8 validation,
+methods, security headers and no-store responses. It uses an empty test token and makes no
 ipify, IPinfo, or DNS requests. No Cloudflare account credentials are needed.
 
 ## GitHub automation
@@ -160,7 +161,7 @@ vulnerability was fixed; all scanners remain enabled.
 
 ## API
 
-Both endpoints are same-origin, return UTF-8 JSON, and set `Cache-Control: no-store`,
+Both endpoints return UTF-8 JSON and set `Cache-Control: no-store`,
 `CDN-Cache-Control: no-store`, and `Cloudflare-CDN-Cache-Control: no-store`.
 No personalized response is placed in the Workers Cache API.
 
@@ -191,6 +192,8 @@ This is an illustrative shape, not real visitor data. Missing fields are `null`.
 If no trusted address is available, `ip`, `family`, and `ipSource` are `null` and
 `reason` is `client_ip_unavailable` or `pseudo_ipv4_without_ipv6`.
 `ipSource` is `cf-connecting-ipv6` when restoring a Pseudo IPv4 overwrite.
+In Add Header mode `ipSource` remains `cf-connecting-ip` and `pseudoIpv4`
+contains the additional Class E address when present.
 City/region information, when available, is approximate and connection-specific;
 the API never exposes coordinates.
 
@@ -203,11 +206,12 @@ Use `Content-Type: application/json` and at least one of:
 ```
 
 Only these two optional string fields are allowed, with at most one IP per family.
-Bodies are limited to **1,024 actual bytes**, including chunked bodies, and
-compressed request bodies are rejected. Addresses must be canonicalizable global
-unicast: private, loopback, link-local, shared/CGNAT, documentation, multicast,
-IPv4-mapped IPv6, and special-purpose/transition ranges are excluded. This is a
-deliberately conservative policy, not an arbitrary-address lookup service.
+Bodies are limited to **1,024 actual bytes**, including chunked bodies, and must
+arrive within five seconds. The endpoint accepts uncompressed JSON. Addresses
+must be canonicalizable global unicast. Private, loopback, link-local, shared/CGNAT,
+documentation, multicast, IPv4-mapped IPv6 and special-purpose ranges are excluded.
+The browser submits detected addresses. Other API clients can submit any address
+that passes the same checks.
 
 The response has separate `ipv4` and `ipv6` slots; an unrequested slot is `null`.
 Each requested slot contains:
@@ -248,7 +252,8 @@ Failure reasons include `missing_token`, `timeout`, `http_error`, `network_error
 Accepted lookups return 200 even when enrichment partially fails; the explicit
 per-service status explains the failure and preserves the other results. Invalid
 requests return 400, cross-origin browser lookups 403, unknown endpoints 404,
-incorrect methods 405 with `Allow`, oversized bodies 413, unsupported types or
+incorrect methods 405 with `Allow`, incomplete uploads that time out 408,
+oversized bodies 413, unsupported types or
 encodings 415, and unexpected internal failures 500. Errors have
 `{"error":{"code":"...","message":"..."}}`. No upstream response or secret is echoed.
 
@@ -341,7 +346,8 @@ privacy notice.
 Static responses use `public/_headers`; Worker responses set their own headers.
 The browser CSP permits only same-origin assets/APIs and the two ipify endpoints.
 No upstream strings become HTML. No URL can be supplied to the API, redirects are
-not followed, upstream JSON is size-limited, and lookups time out after 3.5 seconds.
+not followed, upstream JSON is size-limited, and individual upstream requests
+time out after 3.5 seconds. A client disconnect cancels outstanding lookups.
 
 Static Assets are served directly. A normal dual-stack refresh uses one connection
 request and one lookup per detected family (up to three Worker invocations).
@@ -395,7 +401,7 @@ package.json, package-lock.json, .node-version
 | Addresses work but IPinfo does not | Verify the **runtime** `IPINFO_TOKEN` secret, the Lite plan, and upstream availability. DNS is independent. |
 | PTR record not found | This is a valid DNS result, unlike a failed DNS query. Many public addresses have no PTR. |
 | Local Cloudflare fields are unavailable | `request.cf` and client headers are incomplete locally; do not add fabricated values. |
-| Browser changes are not visible | Run `npm run build:assets`; HTML/CSS and the generated bundle are watched by Wrangler. |
+| Browser changes are not visible | Check the custom build output in the `npm run dev` terminal for TypeScript bundling errors. |
 | Copy fails | Use HTTPS/localhost and allow clipboard writes, or select and copy the value manually. |
 | Builds reports a name mismatch | Both dashboard and Wrangler must use `ip-lukasberan`. |
 | Builds fails on Node/dependencies | Use Node 24.15.0, commit the lockfile, and install with `npm ci`. |

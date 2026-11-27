@@ -32,9 +32,27 @@ describe("Cloudflare DNS over HTTPS", () => {
     });
   });
 
+  it("follows the queried owner's classless delegations regardless of answer order", async () => {
+    const question = ptrName(IPV4);
+    const delegated = "8.0/25.8.8.8.in-addr.arpa.";
+    fetchMock.mockResolvedValueOnce(Response.json({
+      Status: 0,
+      Question: [{ name: question.toUpperCase() + ".", type: 12 }],
+      Answer: [
+        { name: delegated, type: 12, data: "Resolver.example.net." },
+        { name: "elsewhere.example.", type: 12, data: "unrelated.example." },
+        { name: "alias.example.", type: 5, data: delegated },
+        { name: question, type: 5, data: "ALIAS.example." },
+      ],
+    }));
+    expect(await reverseDns(IPV4)).toEqual({ status: "ok", names: ["resolver.example.net"], reason: null });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it.each([
     { Status: 3 }, { Status: 0 }, { Status: 0, Answer: [] },
     { Status: 0, Answer: [{ name: ptrName(IPV4), type: 5, data: "alias.example.net." }] },
+    { Status: 0, Answer: [{ name: "unrelated.example.", type: 12, data: "other.example." }] },
   ])("distinguishes absent PTR records from failures", async (response) => {
     fetchMock.mockResolvedValueOnce(Response.json(response));
     expect(await reverseDns(IPV4)).toEqual({ status: "none", names: [], reason: null });
@@ -44,6 +62,8 @@ describe("Cloudflare DNS over HTTPS", () => {
     [{ Status: 2 }, "dns_error"],
     [{ Status: "0" }, "invalid_response"],
     [{ Status: 0, TC: true }, "invalid_response"],
+    [{ Status: 3, Question: [{ name: "other.example.", type: 12 }] }, "invalid_response"],
+    [{ Status: 0, Answer: [{ name: ptrName(IPV4), type: 5, data: ptrName(IPV4) }] }, "invalid_response"],
     [{ Status: 0, Answer: "invalid" }, "invalid_response"],
     [{ Status: 0, Answer: [{ type: 12, name: ptrName(IPV4), data: "<script>bad</script>" }] }, "invalid_response"],
     [{ Status: 0, Answer: [{ type: "12", name: ptrName(IPV4), data: "example.net." }] }, "invalid_response"],

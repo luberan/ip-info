@@ -34,7 +34,7 @@ describe("deployment and static security contracts", () => {
       main: "./src/index.ts",
       compatibility_date: "2026-11-03",
       routes: [{ pattern: "ip.lukasberan.cz", custom_domain: true }],
-      assets: { directory: "./public", run_worker_first: ["/api/*"], not_found_handling: "404-page" },
+      assets: { directory: "./public", run_worker_first: ["/api", "/api/*"], not_found_handling: "404-page" },
       observability: {
         enabled: false, logs: { enabled: false, invocation_logs: false }, traces: { enabled: false },
       },

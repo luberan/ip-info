@@ -36,6 +36,25 @@ describe("bounded JSON transport", () => {
     await expect(readTextLimited(body, 1024)).rejects.toMatchObject({ code: "invalid_encoding" });
   });
 
+  it("releases the reader and reports the byte limit even if source cleanup stalls", async () => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array(2)); },
+      cancel,
+    });
+    await expect(readTextLimited(stream, 1)).rejects.toMatchObject({ code: "body_too_large" });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(stream.locked).toBe(false);
+  });
+
+  it("reports an HTTP error even if discarding its body stalls", async () => {
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status: 503 })));
+    await expect(fetchJson("https://example.net/data")).rejects.toMatchObject({ reason: "http_error" });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it("uses the Worker-supported manual redirect mode and validates successful JSON", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ value: 1 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -86,7 +105,7 @@ describe("bounded JSON transport", () => {
 
   it("also bounds the time spent reading a stalled response body", async () => {
     vi.useFakeTimers();
-    const cancel = vi.fn();
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
     const body = new ReadableStream<Uint8Array>({
       start(controller) { controller.enqueue(new TextEncoder().encode("{")); },
       cancel,

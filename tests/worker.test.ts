@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, * as entry from "../src/index";
-import { MAX_REQUEST_BYTES } from "../src/lib/http";
+import { MAX_REQUEST_BYTES, REQUEST_BODY_TIMEOUT_MS } from "../src/lib/http";
 import { ptrName } from "../src/lib/ip";
 import { dnsResponse, ipinfoResponse, IPV4, IPV6 } from "./fixtures";
 
@@ -87,9 +87,18 @@ describe("GET /api/connection", () => {
     });
   });
 
+  it("keeps the native IPv6 source in Pseudo IPv4 Add Header mode", async () => {
+    const response = await worker.fetch(new Request("https://ip.lukasberan.cz/api/connection", {
+      headers: { "CF-Connecting-IP": IPV6, "CF-Pseudo-IPv4": "240.1.2.3" },
+    }), {});
+    expect(await response.json()).toMatchObject({
+      ip: IPV6, family: "ipv6", ipSource: "cf-connecting-ip", pseudoIpv4: "240.1.2.3", reason: null,
+    });
+  });
+
   it("ignores an unrelated IPv6 header when the actual connection is ordinary IPv4", async () => {
     const response = await worker.fetch(new Request("https://ip.lukasberan.cz/api/connection", {
-      headers: { "CF-Connecting-IP": IPV4, "CF-Connecting-IPv6": IPV6 },
+      headers: { "CF-Connecting-IP": IPV4, "CF-Connecting-IPv6": IPV6, "CF-Pseudo-IPv4": "240.1.2.3" },
     }), {});
     expect(await response.json()).toMatchObject({ ip: IPV4, family: "ipv4", pseudoIpv4: null });
   });
@@ -225,6 +234,15 @@ describe("POST /api/lookup", () => {
     expect(body).toContain("Test network");
   });
 
+  it("accepts a full-length organization domain", async () => {
+    const domain = [63, 63, 63, 61].map((size) => "a".repeat(size)).join(".");
+    fetchMock.mockImplementation(async (input) => new URL(String(input)).origin === "https://api.ipinfo.io"
+      ? Response.json({ ...ipinfoResponse(IPV4), as_domain: domain })
+      : upstreamResponse(input));
+    const response = await worker.fetch(lookupRequest({ ipv4: IPV4 }), { IPINFO_TOKEN: "unit-test-token" });
+    expect(await response.json()).toMatchObject({ ipv4: { network: { status: "ok", data: { domain } } } });
+  });
+
   it.each([
     null, [], 4, "8.8.8.8", {}, { ipv4: null }, { ipv4: [IPV4] }, { ipv4: 123 },
     { ipv4: "127.0.0.1" }, { ipv4: "100.64.0.1" }, { ipv4: "01.2.3.4" },
@@ -262,6 +280,41 @@ describe("POST /api/lookup", () => {
     }), {});
     expect(response.status).toBe(413);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 408 for an unfinished request body and cancels the reader", async () => {
+    vi.useFakeTimers();
+    try {
+      const cancel = vi.fn(() => new Promise<void>(() => {}));
+      const init = {
+        method: "POST", headers: { "Content-Type": "application/json" }, duplex: "half",
+        body: new ReadableStream<Uint8Array>({ cancel }),
+      };
+      const pending = worker.fetch(new Request("https://ip.lukasberan.cz/api/lookup", init), {});
+      await vi.advanceTimersByTimeAsync(REQUEST_BODY_TIMEOUT_MS);
+      const response = await pending;
+      expect(response.status).toBe(408);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.json()).toMatchObject({ error: { code: "request_timeout" } });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels both enrichment services when the incoming request is aborted", async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    const request = new Request(lookupRequest({ ipv4: IPV4 }), { signal: controller.signal });
+    const pending = worker.fetch(request, { IPINFO_TOKEN: "unit-test-token" });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    controller.abort();
+    expect(await (await pending).json()).toMatchObject({
+      ipv4: { network: { reason: "aborted" }, reverseDns: { reason: "aborted" } },
+    });
   });
 
   it.each(["", "invalid", "-1", "1.5"])("rejects malformed Content-Length %j as invalid rather than oversized", async (length) => {

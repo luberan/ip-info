@@ -1,5 +1,5 @@
 import { getConnection } from "./lib/connection";
-import { BodyError, MAX_REQUEST_BYTES, mediaType, readTextLimited } from "./lib/http";
+import { BodyError, MAX_REQUEST_BYTES, REQUEST_BODY_TIMEOUT_MS, mediaType, readTextLimited } from "./lib/http";
 import { parsePublicIp } from "./lib/ip";
 import { lookupAddress } from "./lib/lookup";
 import { ApiError, errorResponse, jsonResponse } from "./lib/response";
@@ -22,9 +22,13 @@ async function readLookupBody(request: Request): Promise<Partial<Record<AddressF
     throw new ApiError(413, "body_too_large", "The request body must not exceed 1024 bytes.");
   }
   let body: unknown;
+  const deadline = new AbortController();
+  const signal = AbortSignal.any([request.signal, deadline.signal]);
+  const timer = setTimeout(() => deadline.abort(), REQUEST_BODY_TIMEOUT_MS);
   try {
-    body = JSON.parse(await readTextLimited(request.body, MAX_REQUEST_BYTES));
+    body = JSON.parse(await readTextLimited(request.body, MAX_REQUEST_BYTES, signal));
   } catch (error) {
+    if (deadline.signal.aborted) throw new ApiError(408, "request_timeout", "Timed out reading the request body.");
     if (error instanceof BodyError) {
       throw new ApiError(
         error.code === "body_too_large" ? 413 : 400,
@@ -33,7 +37,12 @@ async function readLookupBody(request: Request): Promise<Partial<Record<AddressF
       );
     }
     if (error instanceof SyntaxError) throw new ApiError(400, "invalid_json", "The request body is not valid JSON.");
+    if (request.signal.aborted || error instanceof TypeError || error instanceof DOMException) {
+      throw new ApiError(400, "incomplete_body", "The request body could not be read.");
+    }
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
   if (!isRecord(body) || Object.keys(body).some((key) => key !== "ipv4" && key !== "ipv6")) {
     throw new ApiError(400, "invalid_body", "Provide only optional ipv4 and ipv6 string fields.");
@@ -75,8 +84,8 @@ export default {
       const ips = await readLookupBody(request);
       const connection = getConnection(request);
       const [ipv4, ipv6] = await Promise.all([
-        ips.ipv4 ? lookupAddress(ips.ipv4, env, connection) : null,
-        ips.ipv6 ? lookupAddress(ips.ipv6, env, connection) : null,
+        ips.ipv4 ? lookupAddress(ips.ipv4, env, connection, request.signal) : null,
+        ips.ipv6 ? lookupAddress(ips.ipv6, env, connection, request.signal) : null,
       ]);
       const response: LookupResponse = { ipv4, ipv6 };
       return jsonResponse(response);
