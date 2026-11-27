@@ -24,8 +24,21 @@ they do not guarantee that the application is free of vulnerabilities.
 
 Production secrets belong in Cloudflare Worker runtime settings, never in the
 repository or GitHub Actions. CI and runtime smoke tests need no production token.
-Direct pushes to `main` remain allowed, so review failed checks and security alerts
-before publishing changes. GitHub checks do not gate Cloudflare deployments.
+
+## Repository protections
+
+The [Protect main history ruleset](https://github.com/luberan/ip-info/rules/28230748)
+blocks force-pushes and deletion of `main` for all actors, with no bypass
+exceptions. Maintainers can push fast-forward updates directly. Pull requests,
+independent approvals and passing status checks are optional. Review failed
+checks and security alerts before publishing changes. Cloudflare Workers Builds
+deploys independently of the GitHub check results.
+
+GitHub Actions requires action references to use a full-length commit SHA.
+When updating an action, pin the exact commit in the workflow. The default
+`GITHUB_TOKEN` has read-only permissions and cannot approve pull requests.
+The Scorecard job requests `security-events: write` to upload findings from
+trusted runs. Pull request workflows use read-only permissions.
 
 ## Accepted Scorecard recommendations
 
@@ -37,7 +50,7 @@ to conceal these decisions. Full Scorecard results remain available in GitHub.
 
 | Check | Accepted reason | Reassessment |
 | --- | --- | --- |
-| [Branch protection](https://github.com/luberan/ip-info/security/code-scanning/11) | Direct pushes to `main` and informative checks are a deliberate project workflow choice. Mandatory PRs or status gates would contradict that choice. | Revisit if the maintainer changes the workflow policy. |
+| [Branch protection](https://github.com/luberan/ip-info/security/code-scanning/11) | The ruleset protects `main` against history rewrites and deletion. The project keeps direct fast-forward pushes available and treats status checks as advisory. | Revisit if the project adopts mandatory PRs or required status checks. |
 | [Fuzzing](https://github.com/luberan/ip-info/security/code-scanning/12) | No recognized external fuzzer integration is currently present. Unit and runtime smoke tests exist, but are not claimed to be fuzzing. | Revisit when parsing/input risk or project scope justifies a real fuzzing integration. |
 | [Code review](https://github.com/luberan/ip-info/security/code-scanning/13) | Independent approvals are not mandatory, and past changesets have no such approvals. Review history cannot be retroactively fabricated. | Revisit if mandatory independent review becomes part of the project workflow. |
 | [Maintained](https://github.com/luberan/ip-info/security/code-scanning/14) | Scorecard flags a repository younger than 90 days. Repository age is not an actionable code defect. | Reassess after the repository is at least 90 days old; do not manufacture activity for a score. |

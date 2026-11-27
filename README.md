@@ -136,22 +136,25 @@ jobs also test the supported Node 22 minimum and current Node 26 releases.
 - **Private vulnerability reports:** use the process in
   [the security policy](.github/SECURITY.md).
 
-Workflows use standard GitHub-hosted Ubuntu runners, immutable action commit
-pins, read-only checkout credentials, and no production secrets. Only the trusted
-Scorecard job can upload security events; untrusted PR code never uses
-`pull_request_target` or a privileged workflow-run handoff. npm caching avoids
-repeated downloads without retaining test-report artifacts.
+GitHub Actions requires a full-length commit SHA for action references in
+workflows, including GitHub's own actions. The default `GITHUB_TOKEN` has
+read-only permissions, and workflows cannot use it to approve pull requests.
+The workflows in this repository use GitHub-hosted Ubuntu runners and disable
+credential persistence during checkout. The Scorecard job explicitly requests
+`security-events: write` to upload its findings. Pull request checks run on
+`pull_request` with read-only permissions. CI caches npm downloads and keeps
+test output in the job logs.
 
-**Direct pushes to `main` remain allowed.** Checks are informative, not mandatory
-merge gates. A failed GitHub check does not stop Cloudflare Workers Builds;
-Cloudflare independently runs its configured build command. GitHub Actions does
-not deploy the Worker or receive Cloudflare/IPinfo credentials.
+**Direct fast-forward pushes to `main` are allowed.** The
+[Protect main history ruleset](https://github.com/luberan/ip-info/rules/28230748)
+blocks force-pushes and branch deletion with no bypass exceptions. Pull requests,
+review approvals and passing status checks are optional. Cloudflare Workers Builds
+runs its own build and deployment on pushes to `main`, independently of GitHub
+Actions. Production credentials stay in Cloudflare.
 
 Standard GitHub-hosted runner compute is free for public repositories. Larger
 runners, storage overages, and optional paid security features have separate
-billing rules; this setup does not enable them. Scorecard findings about absent
-mandatory reviews or branch protection are expected under the chosen direct-push
-workflow, not proof of an exploitable application vulnerability.
+billing rules; this setup does not enable them.
 
 Accepted Scorecard findings and their reassessment conditions are documented in
 [the security policy](.github/SECURITY.md#accepted-scorecard-recommendations).
