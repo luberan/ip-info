@@ -89,8 +89,6 @@ Cloudflare headers as authenticated metadata outside Cloudflare's edge.
 
 ```sh
 npm test
-npm run typecheck
-npm run build
 npm run test:smoke
 ```
 
@@ -101,31 +99,32 @@ partial failures, timeouts (including stalled bodies), no-store headers, browser
 concurrency, fallback association, safe DOM rendering, stale refresh cancellation,
 and clipboard errors. Browser tests use jsdom; production has no jsdom dependency.
 
-`npm run build` type-checks both Worker and browser contexts, bundles the browser,
-and validates Wrangler with `wrangler deploy --dry-run`. Its output is local to
-`.wrangler/build`; **this is not a production deployment or an edge CPU benchmark**.
-
-`npm run test:smoke` starts the real local Workers runtime through Wrangler's test
-harness and always shuts it down afterwards. It checks browser navigation and
-fetch routing for assets, 404 pages and the API. It also checks UTF-8 validation,
-methods, security headers and no-store responses. It uses an empty test token and makes no
-ipify, IPinfo, or DNS requests. No Cloudflare account credentials are needed.
+`npm run test:smoke` runs `npm run build` once. This type-checks the Worker and
+browser code, bundles the browser assets, and builds the Worker in `.wrangler/build`
+with `wrangler deploy --dry-run`. Both smoke suites use that Worker bundle.
+Wrangler's local runtime checks asset and API routing, 404 pages, UTF-8 validation,
+HTTP methods, security headers and cache policy. A second local runtime intercepts
+all outbound requests to verify IPv4 and IPv6 network and PTR results, including
+the case where IPinfo fails and reverse DNS succeeds. The suites run without
+Cloudflare credentials or requests to live lookup providers.
 
 ## GitHub automation
 
-GitHub Actions runs **tests, type checks, build validation, and runtime smoke
-checks** on pull requests, pushes to `main`, weekly, and on manual request.
+GitHub Actions runs tests, type checks, build validation, runtime smoke checks
+and a dependency audit on pull requests, pushes to `main`, weekly, and on manual request.
 The main job uses the production Node version from `.node-version`; compatibility
 jobs also test the supported Node 22 minimum and current Node 26 releases.
 
-- **CodeQL:** GitHub-managed default setup with extended security queries for
-  JavaScript/TypeScript. Manage it under **Settings → Advanced Security → Code
-  scanning**; do not add a second CodeQL analysis workflow alongside default setup.
+- GitHub manages **CodeQL** through its default setup with extended security
+  queries for JavaScript/TypeScript and GitHub Actions. The configuration lives
+  under **Settings → Advanced Security → Code scanning**.
 - **Dependabot:** weekly npm and GitHub Actions update PRs. Patch/minor updates
   are grouped; major upgrades remain separate. Security update PRs have their own
   group. Updates are never automatically merged.
 - **Dependency review:** pull requests introducing known high/critical
   vulnerabilities receive a failed check, including development dependencies.
+  The CI job also runs `npm audit --audit-level=high` against the full lockfile
+  so newly disclosed vulnerabilities in unchanged packages are checked as well.
 - **OpenSSF Scorecard:** trusted-branch and weekly supply-chain posture checks,
   uploaded to GitHub's code-scanning dashboard. Results are not published to a
   separate external Scorecard service and need no extra token.
@@ -381,7 +380,7 @@ src/
     http.ts, response.ts      Deadlines, bounded JSON, secure API responses
     types.ts, validation.ts   Response contracts and validation helpers
 tests/                       Mocked Worker, IP, DNS, HTTP, browser, config tests
-scripts/smoke.mjs             Real Workers runtime smoke checks
+scripts/smoke*.mjs            Real Workers runtime routing and lookup checks
 .github/
   workflows/                 CI, dependency review, and Scorecard (no deployment)
   dependabot.yml             npm and action update PRs

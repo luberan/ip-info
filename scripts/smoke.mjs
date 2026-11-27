@@ -6,6 +6,7 @@ import { createTestHarness } from "wrangler";
 const server = createTestHarness({
   workers: [{
     configPath: new URL("../wrangler.jsonc", import.meta.url),
+    prebuiltWorkerDir: new URL("../.wrangler/build/", import.meta.url),
     secrets: { IPINFO_TOKEN: "" },
   }],
 });
@@ -79,6 +80,11 @@ try {
     assert.equal(response.statusCode, check.status, `${label}: unexpected status`);
     assert.match(response.headers["content-type"] ?? "", check.mime, `${label}: incorrect content type`);
     assert.equal(response.headers["x-content-type-options"], "nosniff", `${label}: missing nosniff`);
+    assert.equal(response.headers["referrer-policy"], "no-referrer", `${label}: missing referrer policy`);
+    assert.equal(response.headers["x-frame-options"], "DENY", `${label}: missing frame protection`);
+    const csp = response.headers["content-security-policy"];
+    assert.ok(typeof csp === "string", `${label}: missing CSP`);
+    assert.match(csp, /(?:^|;)\s*frame-ancestors 'none'(?:\s*;|$)/, `${label}: incorrect frame-ancestors policy`);
 
     if (check.api) {
       for (const name of ["Cache-Control", "CDN-Cache-Control", "Cloudflare-CDN-Cache-Control"]) {

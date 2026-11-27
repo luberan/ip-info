@@ -24,6 +24,7 @@ jobs:
         uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
         with:
           fail-on-severity: high
+          fail-on-scopes: runtime, development, unknown
           comment-summary-in-pr: never
           retry-on-snapshot-warnings: true
           retry-on-snapshot-warnings-timeout: 120

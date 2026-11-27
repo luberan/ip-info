@@ -63,27 +63,28 @@ beforeEach(() => {
 
 afterEach(() => { vi.useRealTimers(); });
 
-describe("mock request routing", () => {
-  it.each([
-    "https://api.ipify.org.attacker.example?format=json",
-    "https://attacker.example/api.ipify.org?format=json",
-    "https://attacker.example/?target=api.ipify.org",
-    "https://api.ipify.org@attacker.example?format=json",
-    "http://api.ipify.org?format=json",
-    "https://api.ipify.org?format=text",
-    "https://api6.ipify.org.attacker.example?format=json",
-    "https://attacker.example/api6.ipify.org?format=json",
-    "https://attacker.example/?target=api6.ipify.org",
-    "https://api6.ipify.org@attacker.example?format=json",
-    "http://api6.ipify.org?format=json",
-    "https://api6.ipify.org?format=text",
-  ])("rejects an unrecognized detector URL: %s", (url) => {
-    expect(() => fetchMock(url)).toThrow("Unexpected browser request.");
-    expect(fetchMock).toHaveBeenCalledOnce();
-  });
-});
-
 describe("independent browser detection and rendering", () => {
+  it("contacts only the two detectors and the first-party API, without credentials", async () => {
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    const calls = fetchMock.mock.calls;
+    expect(calls.map(([url]) => String(url)).sort()).toEqual([
+      ...ipifyRequests, "/api/connection", "/api/lookup", "/api/lookup",
+    ].sort());
+    const submissions = [];
+    for (const [url, init] of calls) {
+      expect(init?.credentials).toBe("omit");
+      if (ipifyRequests.has(String(url))) {
+        expect(init).toMatchObject({ mode: "cors", referrerPolicy: "no-referrer" });
+      }
+      if (String(url) === "/api/lookup") {
+        expect(init?.method).toBe("POST");
+        submissions.push(JSON.parse(String(init?.body)));
+      }
+    }
+    expect(submissions).toEqual(expect.arrayContaining([{ ipv4: IPV4 }, { ipv6: IPV6 }]));
+  });
+
   it("offers the first-party connection link until the interactive checks start", async () => {
     const style = document.createElement("style");
     style.textContent = readFileSync(resolve("public", "styles.css"), "utf8");
@@ -112,12 +113,6 @@ describe("independent browser detection and rendering", () => {
     expect(text("connection-family")).toBe("IPv4");
     expect(button("ipv4-address").disabled).toBe(false);
     expect(button("ipv6-address").disabled).toBe(false);
-    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/api/lookup")).toHaveLength(2);
-    for (const [input, init] of fetchMock.mock.calls) {
-      expect(init?.credentials).toBe("omit");
-      if (ipifyRequests.has(String(input))) expect(init?.mode).toBe("cors");
-      expect(String(input)).not.toMatch(/ipinfo|dns-query/);
-    }
   });
 
   it("keeps country names and timestamps in English regardless of browser language", async () => {
@@ -352,6 +347,21 @@ describe("independent browser detection and rendering", () => {
     expect(text("ipv4-organization")).toBe(organization);
     expect(document.querySelector("#ipv4-organization img")).toBeNull();
     expect(Reflect.get(window, "pwned")).toBeUndefined();
+  });
+
+  it("discards network and PTR results for a different address of the same family", async () => {
+    fetchMock.mockImplementation((input, init) => {
+      if (String(input) === "/api/lookup" && JSON.parse(String(init?.body)).ipv6 === IPV6) {
+        return Promise.resolve(Response.json(lookupResponse("2606:4700:4700::1111")));
+      }
+      return defaultFetch(input, init);
+    });
+    const app = await import("../src/client/app");
+    await app.initialLoad;
+    expect(text("ipv6-address")).toBe(IPV6);
+    expect(text("ipv6-organization")).toBe("Unavailable");
+    expect(text("ipv6-dns")).toBe("DNS lookup failed");
+    expect(text("ipv4-organization")).toBe("IPv4 network");
   });
 
   it("rejects all-null network data even if an unrecognized extra field is present", async () => {

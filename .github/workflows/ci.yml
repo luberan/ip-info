@@ -34,10 +34,10 @@ jobs:
         run: npm ci
       - name: Run unit and frontend tests
         run: npm test
-      - name: Check types and validate the deployment build
-        run: npm run build
-      - name: Smoke-test the actual Workers runtime
+      - name: Check types, build and smoke-test the deployment bundle
         run: npm run test:smoke
+      - name: Audit locked production and development dependencies
+        run: npm audit --audit-level=high
 
   compatibility:
     name: Unit tests on Node.js ${{ matrix.node }}
